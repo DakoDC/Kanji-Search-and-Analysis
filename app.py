@@ -1,5 +1,11 @@
 
-
+#
+# cambia nome colonna character ?
+# mettere False nel save di phrases
+# Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ?
+# - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?)
+# tenere words_load così o più compatto ?
+# mostrare salvati solo il kanji e poi se ci passi sopra/clicchi/.. mostra i dettagli e grafici(?)
 
 import json                 # read json file
 import polars as pl
@@ -9,8 +15,15 @@ import os                   # cehck if file exists
 
 # url = https://github.com/davidluzgouveia/kanji-data
 
+
+
+
+###########
+# kanji.json
+
 kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
 st.set_page_config(layout="wide")
+
 
 @st.cache_data
 def kanji_load():
@@ -31,11 +44,66 @@ def kanji_load():
 
 kanjis = kanji_load()
 
-# '''print("Total number of kanjis in the df: ",kanjis.select(pl.count("character")))
+print("Total number of kanjis in the df: ",kanjis.select(pl.count("character")))
 # 13108
 
-# words_tsv = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\words.tsv"
-# words = pl.read_csv(words_tsv, separator="\t")
+
+
+# Note: Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
+# I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani. 
+
+
+
+
+################
+# words.tsv
+
+words_tsv = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\words.tsv"
+
+
+@st.cache_data
+def words_load():
+    phrases = (
+        pl.read_csv(words_tsv, separator="\t")
+        .rename({"word or phrase": "character", "kana": "readings_kun", "translation": "meanings", "tags": "jlpt_new"})
+    
+        # keep only the phrases with more than 1 kanji in them (since most likely all of them are already in the kanjis df)
+        .filter( pl.col("character").str.len_chars() > 1 )
+    )
+    # keep only the jlpt value from the orignally "tags" column of the words df
+    phrases = phrases.with_columns(
+        pl.col("jlpt_new").str.split("|")
+        .list.eval(
+            pl.element().filter(
+                pl.element().is_in(["n1","n2","n3","n4","n5"])
+                )
+            ).list.first().str.strip_chars('n').cast(pl.Int64)
+        )
+
+    phrases = phrases.with_columns(
+        # transform the string columns into list of strings, like in the respective kanjis df columns 
+        pl.col(["meanings","readings_kun"]).str.split(", "),
+
+        # make the save column a boolean with False values like the respective kanjis df column
+        save = pl.lit(False)
+    )
+
+    # adds the missing columns of the phrases df, to be able to stack the 2 dfs
+    phrases = (
+        phrases
+        .with_columns(
+            # for every column of the kanjis df not in the words df, it adds a column with the same name of NULLs 
+            pl.lit(None).alias(col) for col in kanjis.columns if col not in phrases.columns
+            )
+            # sorts the columns in the correct order
+            .select(kanjis.columns)
+    )
+    return phrases
+
+phrases = words_load()
+kanjis = kanjis.vstack(phrases)
+
+
 
 
 # search for words with a kanji in them
@@ -48,14 +116,9 @@ kanjis = kanji_load()
 #         .str.contains( char_search )
 #         )
 #     )
-# '''
 
 
-
-# Note: Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
-# I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani. 
-
-
+################
 
 # Find the corrresponding kanji of an english word
 def kanji_search(word_search):
@@ -79,6 +142,11 @@ def kanji_search(word_search):
     # Gets the word/s with a less clear desired meaning
     if df.is_empty():
         df = kanjis.filter(meanings | wk_meanings)
+    
+    if df.is_empty():
+        df = kanjis.filter(
+            pl.col("meanings").list.contains(word_search.lower())
+        )
 
     return df
     
@@ -98,11 +166,8 @@ st.write('# Kanji search')
 # User chooses the word to search and return the df with the corresponding kanjis
 search_word = st.text_input("Insert word to search: ")
 search_df = kanji_search(search_word)
-# .with_columns(
-#     save = pl.lit(False) # add a save column, to save the kanji in the library
-# )
-# create a checkbox in the save column
 
+# create a checkbox in the save column
 search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df
     search_df,
     column_config={
