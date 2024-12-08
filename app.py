@@ -2,10 +2,18 @@
 #
 # cambia nome colonna character ?
 # mettere False nel save di phrases
-# Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ?
-# - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?)
+# Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ? Forse no ?
+# - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?) # es. plane (hikouki)
 # tenere words_load così o più compatto ?
 # mostrare salvati solo il kanji e poi se ci passi sopra/clicchi/.. mostra i dettagli e grafici(?)
+# - metterlo come cambio di modalità in cui si vede il df a scelta dell'utente
+# - mettere lista a cascata dei kanji e il selezionato mostra il dataset
+# Fai sezione aperta da un pulsante dei grafici / analisi dei kanji
+# cerca kanji con radicale uguale
+# cerca parole con lo stesso kanji dentro
+# unire romaji a df originale ?
+
+# Trovare kanji per pronuncia
 
 import json                 # read json file
 import polars as pl
@@ -21,9 +29,9 @@ import os                   # cehck if file exists
 ###########
 # kanji.json
 
-kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
 st.set_page_config(layout="wide")
 
+kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
 
 @st.cache_data
 def kanji_load():
@@ -35,17 +43,18 @@ def kanji_load():
         kanji_dict = {"save": False,"character": kanji} # convert the kanji to an item in a dict
         kanji_dict.update(data[kanji]) 
         kanjis_raw.append(kanji_dict) # append the new dict of the kanji
-    
-    # Create a Polars DataFrame from the list of dictionaries, with only the useful columns
-    # kanjis = pl.DataFrame(kanjis_raw).select(
-    #     pl.col(["character", "meanings","readings_on","wk_meanings", "wk_radicals"])
+
+    # st.write(pl.DataFrame(kanjis_raw))
+    # kanjis = pl.DataFrame(kanjis_raw).with_columns(
+    #     pl.col(["meanings","wk_meanings","wk_radicals"]).str.to_lowercase()
     #     )
-    return pl.DataFrame(kanjis_raw) # , kanjis
+
+    return pl.DataFrame(kanjis_raw)
 
 kanjis = kanji_load()
-
-print("Total number of kanjis in the df: ",kanjis.select(pl.count("character")))
+# print("Total number of kanjis in the df: ",kanjis.select(pl.count("character")))
 # 13108
+
 
 
 
@@ -72,6 +81,9 @@ def words_load():
     )
     # keep only the jlpt value from the orignally "tags" column of the words df
     phrases = phrases.with_columns(
+        # turn all thes strings in the column to lowercase
+        # pl.col("meanings").str.to_lowercase(),
+
         pl.col("jlpt_new").str.split("|")
         .list.eval(
             pl.element().filter(
@@ -104,18 +116,40 @@ phrases = words_load()
 kanjis = kanjis.vstack(phrases)
 
 
+##################
 
+kana_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kana.json"
 
-# search for words with a kanji in them
-# char_search = kanjis.item(80,"character")
-# print(
-#     f"Words with the kanji {char_search} in them:\n",
-#     words
-#     .filter(
-#         pl.col("word or phrase")
-#         .str.contains( char_search )
-#         )
-#     )
+# load the kana file
+@st.cache_data
+def kana_load():
+    with open(kana_url, mode="r") as f:
+        json_object = json.load(f)
+    return json_object
+
+# dict where keys = kana, values = romaji (spelling in the roman alphabet)
+kana_dict = kana_load()
+
+# given a list of kanas, it translates it to romaji
+def kana_to_romaji(row):
+    new_row = []
+    for word in row:
+
+        romaji_word = ''.join(kana_dict.get(char, '') for char in word) ##### toglie il punto
+        new_row.append(romaji_word)
+    return new_row
+
+@st.cache_data
+def add_romaji():
+    return kanjis.with_columns(
+        romaji_on = pl.col("readings_on").map_elements(kana_to_romaji, return_dtype = pl.List(pl.String)),
+        romaji_kun = pl.col("readings_kun").map_elements(kana_to_romaji, return_dtype = pl.List(pl.String))
+    )
+
+kanjis_romaji = add_romaji()
+
+# st.write("Romaji: ")
+# kanjis_romaji
 
 
 ################
@@ -147,16 +181,20 @@ def kanji_search(word_search):
         df = kanjis.filter(
             pl.col("meanings").list.contains(word_search.lower())
         )
+    
+    if df.is_empty():
+        df = kanjis_romaji.filter(
+            pl.col("romaji_on").list.contains(word_search.lower())
+            |
+            pl.col("romaji_kun").list.contains(word_search.lower())
+        )
+
 
     return df
     
 
-# '''search_word = input("Insert word to search the kanji/s of: ")
-# search_df = kanji_search(search_word)
-# print(search_df)
-# '''
 
-
+    
 
 ############# Streamlit ###############
 
@@ -266,29 +304,15 @@ if not (saved_edit["save"].all()):
 
 
 
+#############################
 
+# Same radicals in saved kanjis
 
+search_radical = st.text_input("Search for saved kanjis with the same radical:").lower().capitalize()
 
-
-
-
-
-
-############################
-
-# Polars
-
-print(
-    kanjis
-    .group_by()
-
-)
-
-
-
-
-
-
+saved_radicals = saved.filter(pl.col("wk_radicals").str.contains(search_radical))
+if(search_radical):
+    st.write(saved_radicals)
 
 
 
@@ -301,28 +325,34 @@ print(
 
 import altair as alt
 
-# strokes ~ jlpt
-# st.write(kanjis)
 
-chart = (
-    alt.Chart(kanjis)
-    .mark_point()
-    .encode(
-        alt.X("strokes"),
-        alt.Y("freq"),
-        alt.Color("jlpt_new")
-    )
-         
+
+kanjis_count = kanjis.with_columns(
+    pl.col("meanings").list.len()
+    .alias("count_meanings"),
+    pl.col("readings_on").list.len()
+    .alias("count_readings_on"),
+    pl.col("readings_kun").list.len()
+    .alias("count_readings_kun"),
+    pl.col("wk_radicals").list.len() 
+    .alias("count_wk_radicals")
 )
 
-st.altair_chart(chart, use_container_width=True)
+test = kanjis_count.group_by(pl.col(["jlpt_new","strokes"])).agg(pl.col("character").count()).filter(~pl.col("jlpt_new").is_null())
 
-radicals = kanjis["wk_radicals"].explode()
-# print(pl.DataFrame(radicals))
-# most used radicals
-print(
-    pl.DataFrame(radicals).
-    select(pl.col("wk_radicals").value_counts())
-    .unnest("wk_radicals")
-    .sort(by="count",descending=True)
+chart = (
+    alt.Chart(test)
+    .mark_circle()
+    .encode(
+        alt.Y("jlpt_new:N"),
+        alt.X("strokes"),
+        alt.Size("character",title="Number of kanjis")
+    )
+).properties(
+    height = 200,
+    width = 480
+)
+st.write("Amount of kanjis for jlpt level and number of strokes")
+st.altair_chart(
+    chart
 )
