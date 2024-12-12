@@ -1,8 +1,9 @@
 
 # Bug: Se tolgo un kanji che nel search df ha la checkbox true -> lo risalva
 # - mettere che se metto true lo rimette subito a False ?
-# cambia nome colonna character ?
+# Nella ricerca per cana non conta i tsu piccoli (dako -> dakko)
 
+# cambia nome colonna character ?
 # Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ? Forse no ?
 # - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?) # es. plane (hikouki)
 # tenere words_load così o più compatto ?
@@ -25,6 +26,8 @@ import streamlit as st
 import pandas as pd         # to_csv(mode='a')
 import os                   # cehck if file exists
 import altair as alt
+from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid.shared import GridUpdateMode
 # url = https://github.com/davidluzgouveia/kanji-data
 
 
@@ -223,7 +226,6 @@ search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df
     search_df,
     column_config={
         "save": st.column_config.CheckboxColumn(
-            "save?",
             default=False # checkbox is initially not checked
         )
     },
@@ -267,96 +269,120 @@ if not os.path.exists(saved_url):
 
 
 
-
-
-
-
-
-
-
-
-
+##################################
 
 # reads the library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True)
 
-st.write("Saved kanjis library: ")
-# adds the checkbox to the 'save' column and prints the df
-saved_edit = pl.DataFrame(st.data_editor( # returns a pandas df
-    saved,
-    column_config={
-        "save": st.column_config.CheckboxColumn(
-            "save?",
-            default=True
-            # if a kanji is in the library, it means it was checked in the
-            # search dataframe earlier, so the checkbox is checked by default
-        )
-    },
-    use_container_width=True,
-    column_order=("save","character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals"),
-    disabled=("character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals")
-))
+# switches to the compact viewing mode
+is_compact = st.checkbox("Compact viewing style")
+
+if(is_compact):
+    # Instead of showing all the info of each saved kanji, it shows only the 'save' and 'character' columns
+    # And to view all the info you check a checkbox of the kanjis the user chooses
+
+    st.write("Saved kanjis library - Compact:")
+
+    # create pandas df with only 'save' and 'character' column, to use less space
+    kanjis_pd = (
+        saved
+        .select(pl.col(["save","character"]))
+        .to_pandas() # needed in pandas for the AgGrid functions
+        ).astype({'character': 'string'}) # pandas reads the 'character' column as an 'object' type
+
+    
+    n_cols = 6 # number of df to fit next to each other
+    cols = st.columns(n_cols) # creates n_cols spaces where to put each df
+
+    n_kanjis = 5 # initial number of kanjis per df 
+    height_kanjis_pd = 175 # height of the df needed to fit 5 rows of kanjis
+
+    # increases the amount of kanjis per df if there are too many to fit with the previous amount 
+    while(len(kanjis_pd) > n_kanjis * n_cols):
+        n_kanjis += 5 # adds the space for 5 kanjis per each df
+        height_kanjis_pd += 140 # every +140 adds 5 rows of kanjis
+    
+    # split the dataframe into smaller ones containing up to 'n_kanjis' kanjis
+    kanjis_split = []
+    for i in range(0, len(kanjis_pd), n_kanjis): 
+        kanjis_split.append(kanjis_pd.iloc[i : i + n_kanjis])
+
+    grid_data_list = [] # will contain all the ["data"] parts of the AgGrid objects 
+    grid_selection_list = [] # will contain all the ["selected_rows"] parts of the AgGrid objects 
+
+    for i in range(len(kanjis_split)): # for each dataframe
+        with cols[i]:
+            # setup for the saved kanjis df
+            gb = GridOptionsBuilder.from_dataframe(kanjis_split[i]) # requires a pandas df
+            gb.configure_selection("multiple", use_checkbox = True)  # Allows more than 1 row to be selected with a checkbox (without doesn't allow multiple selection and deselection)
+            gb.configure_column("save", editable=True)  # Allow editing of the "save" checkbox
+            gb.configure_column("character", editable=False, cellRenderer="agGroupCellRenderer")  # Make "character" non-editable but clickable by the user
+            grid_options = gb.build() # makes checkboxes clickable
+
+            # creates and shows the saved kanjis df
+            grid_response = AgGrid(
+                kanjis_split[i],
+                gridOptions = grid_options, 
+                update_mode = GridUpdateMode.SELECTION_CHANGED,
+                height = height_kanjis_pd,
+                theme = "streamlit",
+                # allow_unsafe_jscode = True,
+            )
+
+            # adds each splitted df to a list
+            grid_data_list.append(pl.DataFrame(grid_response["data"]))
+
+            # adds to a list the rows selected by the user
+            selection = pl.DataFrame(grid_response["selected_rows"])
+            if not selection.is_empty():
+                grid_selection_list.append(selection)
+
+    # if at least 1 kanji is in the saved library
+    if len(grid_data_list) > 0:
+        # concatenates the splitted dataframes into 1
+        grid_data_df = pl.concat(grid_data_list) 
+        
+        # adds the remaning columns to the df (only has 'save' and 'character' columns)
+        saved_edit = grid_data_df.join(kanjis.drop("save"), on="character")
+
+    else:
+        # initialize the saved_edit df as an empty dataframe with the kanjis df's header
+        saved_edit = kanjis.head(1).filter(False)
+    
+    # if at least 1 kanji was selected
+    if len(grid_selection_list) > 0:
+        grid_selection_df = pl.concat(grid_selection_list) # concatenate the dataframes in the list
+
+        # shows all the selected kanjis with all their informations
+        for i in range(len(grid_selection_df)):
+            selected_kanji = grid_selection_df.row(i)[1]
+            st.write(f"# {selected_kanji}", kanjis.filter(pl.col('character') == selected_kanji))
+
+
+# Normal mode
+else:
+    st.write("Saved kanjis library: ")
+    # adds the checkbox to the 'save' column and prints the df
+    saved_edit = pl.DataFrame(st.data_editor( # returns a pandas df
+        saved,
+        column_config={
+            "save": st.column_config.CheckboxColumn(
+                default=True
+                # if a kanji is in the library, it means it was checked in the
+                # search dataframe earlier, so the checkbox is checked by default
+            )
+        },
+        use_container_width=True,
+        column_order=("save","character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals"),
+        disabled=("character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals")
+    ))
 
 
 
 
-########### Secondary viewing method of the kanjis library ###########
-# con pulsante/checkbox, cambia modalità di visulizzazione (posso quindi tenere le impostazioni di prima invece di fare il cehck per entrambi i saved df?)
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.shared import GridUpdateMode
 
 
-# kanjis df with only save and character column
-kanjis_pd = (
-    saved
-    .select(pl.col(["save","character"]))
-    .to_pandas()
-    ).astype({'character': 'string'}) # pandas reads the 'character' column as an 'object' type
-kanjis_pd_copy = kanjis_pd.copy()
-st.write("Saved v.2")
-gb = GridOptionsBuilder.from_dataframe(kanjis_pd) # requires a pandas df
-gb.configure_selection("single")  # Allow single row selection
-gb.configure_column("save", editable=True)  # Allow editing of the "save" checkbox
-gb.configure_column("character", editable=False, cellRenderer="agGroupCellRenderer")  # Make "character" non-editable but clickable
-grid_options = gb.build()
-
-grid_response = AgGrid(
-    kanjis_pd,
-    gridOptions=grid_options,
-    update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=200,
-    theme="streamlit",  # Options: "streamlit", "light", "dark", "blue", "fresh"
-    allow_unsafe_jscode=True,
-)
-# st.write(pl.DataFrame(grid_response["data"]).select(pl.col("save")).to_pandas())
-# st.write(kanjis_pd_copy["save"])
-# if not(pl.DataFrame(grid_response["data"]).select(pl.col("save")).to_pandas().equals(kanjis_pd_copy["save"])):
-#     st.rerun()
-
-# st.write(pl.DataFrame(grid_response["data"]))
-
-# saved_edit = pl.DataFrame(grid_response["data"]) # ha solo 2 colonne
-if not pl.DataFrame(grid_response["selected_rows"]).is_empty():
-    selected_kanji = pl.DataFrame(grid_response["selected_rows"]).row(0)[1] # gets th kanji of the selected row
-    st.write(f"# {selected_kanji}")
-    st.write(kanjis.filter(pl.col("character") == selected_kanji))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+##################### add and remove kanjis from the saved library ##################
 
 # df with the kanjis checked in the search df, that need to be added to the library
 kanji_to_add = search_df_edit.filter(
@@ -369,85 +395,32 @@ kanji_to_add = search_df_edit.filter(
 # adds the kanjis to the library, if there are any to add
 if not kanji_to_add.is_empty():
     pd.DataFrame(kanji_to_add).to_csv(saved_url, mode="a", index=False, header=False, sep="\t")
-    # search_df_edit.with_columns(
-    #     save = pl.when(pl.col("character").is_in(saved.select(pl.col("character")))).then(True).otherwise(False)
-    # )
-    
-    # st.write(search_df_edit.with_columns(
-    #     pl.col("character").is_in(kanji_to_add.select(pl.col("character")))
-    #     ).select(pl.col("save")))
     st.rerun() 
 
 
-st.write(pl.DataFrame(grid_response["data"])["save"].all())
 
-st.write(saved_edit.filter(
-            pl.col("save") == True
-        )
-        )
-st.write(pl.DataFrame(grid_response["data"]).filter(pl.col("save") == True).select(pl.col("character")))
+
 # If a kanji in the library is unchecked, it removes it
-if not (saved_edit["save"].all() & pl.DataFrame(grid_response["data"])["save"].all()):
+if not saved_edit.is_empty(): # without it gives an error for the next if 
+    if not saved_edit["save"].all():
 
-    # makes the dataframe with only the checked kanjis the new saved library
-    saved_edit_post_remove = saved_edit.filter(
-            pl.col("save") == True
-        ).filter(
-            # ~pl.col("character").is_in(pl.DataFrame(grid_response["data"]).filter(pl.col("save") == False).select(pl.col("character"))
-            pl.col("character").is_in(pl.DataFrame(grid_response["data"]).filter(pl.col("save") == True).select(pl.col("character"))
+        # makes the dataframe with only the checked kanjis the new saved library
+        saved_edit_post_remove = saved_edit.filter(
+                pl.col("save") == True
             )
-        )
-    st.write(saved_edit_post_remove)
-    # overwrites the save file without the unchecked kanjis
-    saved_edit_post_remove.write_csv(saved_url, separator="\t", include_header=True)
-    
-    # aggiorna il search df togliendo il check dalla box
-    # search_df_edit_new = search_df_edit.with_columns(
-    #     save = pl.when(pl.col("character").is_in(saved_edit_post_remove.select(pl.col("character")))).then(True).otherwise(False)
 
-    # )
+        # overwrites the save file without the unchecked kanjis
+        saved_edit_post_remove.to_pandas().to_csv(saved_url, sep="\t",index=False, header=True)
+        ## saved_edit_post_remove.write_csv(saved_url, separator="\t", include_header=True) # write_csv doesn't work with nested data
 
-    st.rerun() 
-
-
-
-###########
-# Visualizzazione kanji selezionato
-
-# from st_aggrid import AgGrid, GridOptionsBuilder
-# from st_aggrid.shared import GridUpdateMode
-
-# kanjis_pd = (
-#     saved_edit
-#     .select(pl.col(["save","character"]))
-#     .to_pandas()
-#     )
-# gb = GridOptionsBuilder.from_dataframe(kanjis_pd) # requires a pandas df
-
-# gb.configure_selection("single")  # Allow single row selection
-# grid_options = gb.build()
-
-
-# grid_response = AgGrid(
-#     kanjis_pd,
-#     gridOptions=grid_options,
-#     update_mode=GridUpdateMode.SELECTION_CHANGED,
-#     height=200,
-#     theme="streamlit",  # Options: "streamlit", "light", "dark", "blue", "fresh"
-# )
-
-
-# selected_kanji = pl.DataFrame(grid_response["selected_rows"]).row(0)[1] # gets th kanji of the selected row
-# st.write(f"# {selected_kanji}")
-# st.write(kanjis.filter(pl.col("character") == selected_kanji))
+        st.rerun() 
 
 
 
 
+############## Operations on the saved kanjis ###############
 
-#############################
-
-# Same radicals in saved kanjis
+# Gets the saved kanjis with the same radical
 
 search_radical = st.text_input("Search for saved kanjis with the same radical:").lower().capitalize()
 
@@ -460,37 +433,41 @@ if(search_radical):
 
 
 
-#########
-
-# Analysis
 
 
+###################### Plots ##########################
 
+
+# adds columns with the number of elements in the lists of other columns
 kanjis_count = kanjis.with_columns(
     pl.col("meanings").list.len()
     .alias("count_meanings"),
+    
     pl.col("readings_on").list.len()
     .alias("count_readings_on"),
+    
     pl.col("readings_kun").list.len()
     .alias("count_readings_kun"),
+    
     pl.col("wk_radicals").list.len() 
     .alias("count_wk_radicals")
 )
 
-test = (
+# number of kanjis for each jlpt level and number of strokes
+jlpt_strokes = (
     kanjis_count
     .group_by(pl.col(["jlpt_new","strokes"]))
     .agg(pl.col("character").count())
     .filter(~pl.col("jlpt_new").is_null())
 )
-
+jlpt_strokes
 chart = (
-    alt.Chart(test.to_pandas())
+    alt.Chart(jlpt_strokes.to_pandas())
     .mark_circle()
     .encode(
-        alt.Y("jlpt_new:O"),
+        alt.Y("jlpt_new:O", sort="descending"),
         alt.X("strokes"),
-        alt.Size("character", title="Number of kanjis")
+        alt.Size("character", title="Number of kanjis"),
     )
 ).properties(
     height = 200,
@@ -498,10 +475,9 @@ chart = (
 )
 st.write("Amount of kanjis for jlpt level and number of strokes")
 
-st.altair_chart(
-    chart
-)
-
+st.altair_chart(chart)
+# The more difficult the level the more strokes are needed
+# there seems to be somewhat of a normal distribution among all levels, getting clearer with the increase in difficulty (and in amount of kanjis)
 
 
 
