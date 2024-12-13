@@ -579,9 +579,229 @@ st.altair_chart(
 #     chart
 # )
 
-#########################################################àà
+#########################################################
+
+
+# most used radicals
+
+
+# radicals_count_dict = radicals_count.set_index('wk_radicals').to_dict()['count']
+import streamlit as st
+import pyvis
+from pyvis.network import Network
+import polars as pl
+
+# Example DataFrame (Replace with your actual data)
+# data = {
+#     "character": ["一", "二", "三", "四"],
+#     "wk_radicals": [["一"], ["二"], ["三"], ["一", "二"]]
+# }
+
+# # Create a Polars DataFrame
+# kanjis = pl.DataFrame(data)
+kanjis_filtered = (
+    kanjis
+    .filter(
+        ~pl.col("freq").is_null()
+        &
+        ~pl.col("wk_radicals").is_null()
+    )
+    .filter(pl.col("freq") < 100)
+
+    .sort(pl.col("freq"))
+    .select(pl.col(["character", "wk_radicals"])) 
+)
+
+radicals_count = (
+    kanjis_filtered
+    .select(pl.col("wk_radicals")).explode("wk_radicals")
+    .select(pl.col("wk_radicals").value_counts())
+    .unnest("wk_radicals")
+    .sort(by="count",descending=True)
+).filter(~pl.col("wk_radicals").is_null())
+radicals_count_norm = (
+    radicals_count
+    .with_columns(
+        count = pl.col("count") / pl.col("count").max()
+        )
+    )
+
+radicals_count_dict = dict(zip(radicals_count['wk_radicals'], radicals_count_norm['count']))
+
+
+# Initialize PyVis Network
+net = Network(notebook=False)
+
+# Add nodes for Kanji and radicals
+for kanji, radicals in kanjis_filtered.iter_rows():
+
+    # Add Kanji node
+    net.add_node(kanji, label=kanji, color='red', size=10)
+    
+    # Add radical nodes and edges
+    for radical in radicals:
+
+        # Add radical node
+        net.add_node(radical, label=radical, color='blue', size=radicals_count_dict[radical]*30)
+        # Add edge between Kanji and radical
+        net.add_edge(kanji, radical)
+
+# Save the network as an HTML file
+output_path = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\simple_network.html"
+net.save_graph(output_path)
+
+# Display the graph in Streamlit using st.components.v1.html
+with open(output_path, "r", encoding="utf-8") as f:
+    html_content = f.read()
+
+# Embed the HTML content into Streamlit
+st.components.v1.html(html_content, height=600)
 
 
 
 
+
+
+
+#################
+from pyvis.network import Network
+import networkx as nx
+
+# Example data
+import pandas as pd
+
+
+import networkx as nx
+import matplotlib.pyplot as plt
+
+
+
+# # Create a simple graph
+# G = nx.Graph()
+# G.add_edge(1, 2)
+
+# # Draw the graph
+# nx.draw(G, with_labels=True)
+# st.pyplot(plt)
+
+# st.write("bbbbbbbbbbbbbbb")
+
+
+
+from pyvis.network import Network
+
+# Initialize PyVis Network (disable notebook rendering to avoid notebook-specific errors)
+# net = Network(notebook=False)
+
+# # Add nodes and edges
+# net.add_node(1, label="Node 1")
+# net.add_node(2, label="Node 2")
+# net.add_edge(1, 2)
+
+# # Save the network as an HTML file
+# output_path = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\simple_network.html"
+# net.save_graph(output_path)
+
+# # Display the graph in Streamlit using st.components.v1.html
+# with open(output_path, "r", encoding="utf-8") as f:
+#     html_content = f.read()
+
+# # Embed the HTML content into Streamlit
+# st.components.v1.html(html_content, height=600)
+
+
+
+# Kanji and their radicals (replace this with your actual data)
+data = pd.DataFrame({
+    "character": ["木", "森", "林"],
+    "radicals": [["木"], ["木", "木", "木"], ["木", "木"]]
+})
+
+# Create a graph object using NetworkX
+G = nx.Graph()
+
+# Add edges between kanji and radicals
+for index, row in data.iterrows():
+    kanji = row["character"]
+    for radical in row["radicals"]:
+        G.add_edge(kanji, radical)
+
+# Initialize PyVis Network
+net = Network(notebook=False, height="750px", width="100%", directed=False)
+
+# Load the NetworkX graph into PyVis
+net.from_nx(G)
+
+# Save and show the visualization
+
+net.show("kanji_radical_network.html")
+
+# Read the HTML file and embed it in Streamlit
+with open("kanji_radical_network.html", "r", encoding="utf-8") as f:
+    html_content = f.read()
+
+st.components.v1.html(html_content, height=750, width=900)
+#############################
+# # Assuming `kanjis` is your original dataframe with a "freq" column
+# kanjis_filtered = (
+#     kanjis
+#     .filter(
+#         ~pl.col("freq").is_null()
+#         &
+#         ~pl.col("wk_radicals").is_null()
+#     )
+#     .sort(pl.col("freq"))
+#     .select(pl.col(["character", "wk_radicals"])) 
+# )
+
+# kanjis_filtered
+# # Create edges: Each kanji-radical pair
+# edges = (
+#     kanjis_filtered
+    
+#     .explode("wk_radicals")
+#     .rename({"character": "kanji", "wk_radicals": "radical"})
+# )
+
+# # Create nodes: Combine unique kanjis and radicals
+# kanji_nodes = edges.select(pl.col("kanji").unique()).rename({"kanji": "node"}).with_columns(
+#     pl.lit("kanji").alias("type")
+# )
+# radical_nodes = edges.select(pl.col("radical").unique()).rename({"radical": "node"}).with_columns(
+#     pl.lit("radical").alias("type")
+# )
+# nodes = pl.concat([kanji_nodes, radical_nodes])
+
+# # Assign simple positions and sizes for visualization
+# nodes = nodes.with_columns([
+#     (pl.col("type") == "kanji").cast(int).alias("x"),  # kanji = 1, radical = 0
+#     pl.arange(0, nodes.height).alias("y"),  # simple unique y positions
+#     pl.when(pl.col("type") == "kanji").then(40).otherwise(20).alias("size")  # size based on type
+# ])
+
+# # Convert to pandas for Altair
+# nodes_pd = nodes.to_pandas()
+# edges_pd = edges.to_pandas()
+
+# # Create edges chart
+# edges_chart = alt.Chart(edges_pd).mark_line(opacity=0.6, strokeWidth=1).encode(
+#     x=alt.X('kanji:N', title='Kanji'),
+#     x2=alt.X2('radical:N', title='Radical'),
+# )
+
+# # Create nodes chart
+# nodes_chart = alt.Chart(nodes_pd).mark_circle().encode(
+#     x='x:Q',
+#     y='y:Q',
+#     size='size:Q',
+#     color='type:N',
+#     tooltip='node:N'
+# )
+
+# # Combine charts
+# network_chart = edges_chart + nodes_chart
+# network_chart = network_chart.properties(width=600, height=400)
+
+# # Display in Streamlit
+# st.altair_chart(network_chart, use_container_width=True)
 
