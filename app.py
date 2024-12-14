@@ -7,9 +7,7 @@
 # Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ? Forse no ?
 # - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?) # es. plane (hikouki)
 # tenere words_load così o più compatto ?
-# mostrare salvati solo il kanji e poi se ci passi sopra/clicchi/.. mostra i dettagli e grafici(?)
-# - metterlo come cambio di modalità in cui si vede il df a scelta dell'utente
-# - mettere lista a cascata dei kanji e il selezionato mostra il dataset
+
 # Fai sezione aperta da un pulsante dei grafici / analisi dei kanji
 # cerca kanji con radicale uguale
 # cerca parole con lo stesso kanji dentro
@@ -18,25 +16,27 @@
 # grafo cluster di radicali più usati 
 # (aggiungere radicali mancanti ?)
 
-# Trovare kanji per pronuncia
 
 import json                 # read json file
-import polars as pl
-import streamlit as st
-import pandas as pd         # to_csv(mode='a')
-import os                   # cehck if file exists
-import altair as alt
-from st_aggrid import AgGrid, GridOptionsBuilder
+import polars as pl         # data manipulation
+import streamlit as st      # framework to create an interactive app
+import pandas as pd         # used for functions that won't work with polars
+import os                   # cehck if save kanjis file exists
+import altair as alt        # make plots
+from st_aggrid import AgGrid, GridOptionsBuilder # allow dataframe to be clickable
 from st_aggrid.shared import GridUpdateMode
-# url = https://github.com/davidluzgouveia/kanji-data
+# import pyvis
+from pyvis.network import Network
+# Data sources:
+# https://github.com/davidluzgouveia/kanji-data  ## kanji.json
+# https://www.kaggle.com/datasets/dinislamgaraev/popular-japanese-words ## words.tsv
 
 
 
+################ Load and clean Data ################
 
-###########
-# kanji.json
-
-st.set_page_config(layout="wide")
+# configures the streamlit page layout
+st.set_page_config(layout="wide") 
 
 kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
 
@@ -51,28 +51,16 @@ def kanji_load():
         kanji_dict.update(data[kanji]) 
         kanjis_raw.append(kanji_dict) # append the new dict of the kanji
 
-    # st.write(pl.DataFrame(kanjis_raw))
-    # kanjis = pl.DataFrame(kanjis_raw).with_columns(
-    #     pl.col(["meanings","wk_meanings","wk_radicals"]).str.to_lowercase()
-    #     )
-
     return pl.DataFrame(kanjis_raw)
 
-kanjis = kanji_load()
-# print("Total number of kanjis in the df: ",kanjis.select(pl.count("character")))
-# 13108
+kanjis = kanji_load() # 13108 kanjis
 
 
-
-
-# Note: Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
-# I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani. 
-
-
+# Note from the source data author: "Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
+# I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani"
 
 
 ################
-# words.tsv
 
 words_tsv = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\words.tsv"
 
@@ -125,6 +113,9 @@ kanjis = kanjis.vstack(phrases)
 
 ##################
 
+# dictionary {kana: romaji}
+# kana: japanese phonetic alphabet 
+# romaji: translation of kana in the latin alphabet phontics 
 kana_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kana.json"
 
 # load the kana file
@@ -156,11 +147,8 @@ def add_romaji():
 kanjis_romaji = add_romaji()
 
 
-# st.write("Romaji: ")
-# kanjis_romaji
 
-
-################
+#############################
 
 # Find the corrresponding kanji of an english word
 def kanji_search(word_search):
@@ -216,13 +204,12 @@ def kanji_search(word_search):
 # Title
 st.write('# Kanji search')
 
-# User chooses the word to search and return the df with the corresponding kanjis
+# User chooses the word to search and returns the df with the corresponding kanji/s
 search_word = st.text_input("Insert word to search: ")
 search_df = kanji_search(search_word)
 
 # create a checkbox in the save column
-
-search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df
+search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df by default
     search_df,
     column_config={
         "save": st.column_config.CheckboxColumn(
@@ -230,54 +217,60 @@ search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df
         )
     },
     use_container_width=True,
-    column_order=("save","character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals"),
-    disabled=["character", "meanings","readings_on","wk_meanings", "wk_radicals"]
+    column_order=("save","character","meanings","wk_meanings","readings_on","readings_kun","wk_radicals"),
+    disabled=["character","meanings","wk_meanings","readings_on","readings_kun","wk_radicals"]
 ))
-# search_df_edit = search_df_edit.with_columns(
-#     pl.lit(False).alias("save")
-# )
+
+
 
 
 
 # file with the saved kanjis library
 saved_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\saved.tsv"
 
-# if the file doesn't exists it initializes it with a kanji as example
-# st.write(kanjis.columns)
-kanjis_col_all = 'save'
-for i in kanjis.columns[1:]:
-    kanjis_col_all = kanjis_col_all +'\t' + i 
-
 
 def initialize_file():
-    if not os.path.exists(saved_url):
-        row0 = pd.DataFrame(kanjis.head(1)) # example kanji df
-        row0['save'] = True
-        # row0['save'] = True # add the save column to it
-        # st.write(row0)
+    (
+        kanjis
+        .head(1).filter(False) # keep only the header of the dataframe
+        .to_pandas()
+        .to_csv(saved_url, sep="\t", header=True, index=False)
+    )
 
-        # creates the library file and writes the header
-        with open(saved_url, mode="w") as f:
-            f.write(kanjis_col_all + "\n")
-        
-        # append the example dataframe
-        row0.to_csv(saved_url, mode="a", sep="\t" ,header=False, index=False)
-
-# Initialize the file if missing
+# Initialize the file if it doesn't yet exists
 if not os.path.exists(saved_url):
     initialize_file()
 
 
 
-##################################
+############### Saved Kanjis Library ###################
 
-# reads the library file
+# reads the kanjis library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True)
 
 # switches to the compact viewing mode
 is_compact = st.checkbox("Compact viewing style")
 
-if(is_compact):
+# Normal mode
+if not(is_compact):
+    st.write("Saved kanjis library:")
+    # adds the checkbox to the 'save' column and prints the df
+    saved_edit = pl.DataFrame(st.data_editor( # returns a pandas df
+        saved,
+        column_config={
+            "save": st.column_config.CheckboxColumn(
+                default=True
+                # if a kanji is in the library, it means it was checked in the
+                # search dataframe earlier, so the checkbox is checked by default
+            )
+        },
+        use_container_width=True,
+        column_order=("save","character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals"),
+        disabled=("character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals")
+    ))
+
+# Compact mode
+else:
     # Instead of showing all the info of each saved kanji, it shows only the 'save' and 'character' columns
     # And to view all the info you check a checkbox of the kanjis the user chooses
 
@@ -359,30 +352,15 @@ if(is_compact):
             st.write(f"# {selected_kanji}", kanjis.filter(pl.col('character') == selected_kanji))
 
 
-# Normal mode
-else:
-    st.write("Saved kanjis library: ")
-    # adds the checkbox to the 'save' column and prints the df
-    saved_edit = pl.DataFrame(st.data_editor( # returns a pandas df
-        saved,
-        column_config={
-            "save": st.column_config.CheckboxColumn(
-                default=True
-                # if a kanji is in the library, it means it was checked in the
-                # search dataframe earlier, so the checkbox is checked by default
-            )
-        },
-        use_container_width=True,
-        column_order=("save","character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals"),
-        disabled=("character","meanings","wk_meanings", "readings_on","readings_kun","wk_radicals")
-    ))
 
 
 
 
 
 
-##################### add and remove kanjis from the saved library ##################
+##################### Add and remove kanjis from the saved library ##################
+
+### Add ###
 
 # df with the kanjis checked in the search df, that need to be added to the library
 kanji_to_add = search_df_edit.filter(
@@ -399,6 +377,7 @@ if not kanji_to_add.is_empty():
 
 
 
+### Remove ###
 
 # If a kanji in the library is unchecked, it removes it
 if not saved_edit.is_empty(): # without it gives an error for the next if 
@@ -421,7 +400,6 @@ if not saved_edit.is_empty(): # without it gives an error for the next if
 ############## Operations on the saved kanjis ###############
 
 # Gets the saved kanjis with the same radical
-
 search_radical = st.text_input("Search for saved kanjis with the same radical:").lower().capitalize()
 
 saved_radicals = saved.filter(pl.col("wk_radicals").str.contains(search_radical))
@@ -460,7 +438,7 @@ jlpt_strokes = (
     .agg(pl.col("character").count())
     .filter(~pl.col("jlpt_new").is_null())
 )
-jlpt_strokes
+
 chart = (
     alt.Chart(jlpt_strokes.to_pandas())
     .mark_circle()
@@ -477,7 +455,9 @@ st.write("Amount of kanjis for jlpt level and number of strokes")
 
 st.altair_chart(chart)
 # The more difficult the level the more strokes are needed
-# there seems to be somewhat of a normal distribution among all levels, getting clearer with the increase in difficulty (and in amount of kanjis)
+
+# there seems to be somewhat of a normal distribution among all levels,
+# getting clearer with the increase in difficulty (and in amount of kanjis)
 
 
 
@@ -487,138 +467,24 @@ st.altair_chart(chart)
 
 ###################################################
 
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import MultiLabelBinarizer
-import numpy as np
-
-# Sample dataframe of Kanji and their radicals
-# data = {
-#     "character": kanjis.select(pl.col("character")).explode("character"),
-#     "wk_radicals": kanjis.select(pl.col("wk_radicals")).explode("wk_radicals")
-# }
-
-# df = pd.DataFrame(data)
-# df
-df = pd.DataFrame(
-    kanjis
-    .filter(~pl.col("wk_radicals").is_null())
-    .select(pl.col(["character","wk_radicals"]))
-    ) #.rename( columns = {"0":"character","1": "wk_radicals"})
-df.columns = ["Kanji","Radicals"]
-df
-
-# Encode radicals with MultiLabelBinarizer
-mlb = MultiLabelBinarizer()
-radicals_encoded = mlb.fit_transform(df["Radicals"])
-radicals_df = pd.DataFrame(radicals_encoded, columns=mlb.classes_)
-
-# Compute the frequency of each radical
-radical_frequencies = radicals_df.sum(axis=0)
-
-# Create a DataFrame for clustering
-freq_df = pd.DataFrame({
-    "Radical": radical_frequencies.index,
-    "Frequency": radical_frequencies.values
-})
-
-# Perform clustering on radical frequencies
-kmeans = KMeans(n_clusters=5, random_state=42)
-freq_df["Cluster"] = kmeans.fit_predict(freq_df[["Frequency"]])
-
-# Visualize the clustered radical frequencies
-chart = alt.Chart(freq_df).mark_bar().encode(
-    x=alt.X('Radical:N', title="Radical"),
-    y=alt.Y('Frequency:Q', title="Frequency"),
-    color=alt.Color('Cluster:N', title="Cluster"),
-    tooltip=['Radical', 'Frequency', 'Cluster']
-).properties(
-    title="Radical Frequency and Clustering"
-)
-
-# chart.show()
-st.altair_chart(
-    chart
-)
-
-# from sklearn.cluster import KMeans
-# from sklearn.preprocessing import MultiLabelBinarizer
-
-# # Sample data of Kanji and their radicals
-# df = kanjis.select(pl.col(["character","wk_radicals"]))
-# df
-# # Expand multiple radicals using MultiLabelBinarizer
-# mlb = MultiLabelBinarizer()
-# radicals_encoded = mlb.fit_transform(df["wk_radicals"].to_list())
-# radicals_df = pl.DataFrame(radicals_encoded, schema=mlb.classes_)
-
-# # Add encoded radicals back to the Polars dataframe
-# df_encoded = df.hstack(radicals_df)
-
-# # Perform k-means clustering using the encoded data
-# kmeans = KMeans(n_clusters=3, random_state=42)
-# clusters = kmeans.fit_predict(radicals_encoded)
-
-# # Add cluster labels to the Polars dataframe
-# df_encoded = df_encoded.with_columns(pl.Series("Cluster", clusters))
-
-# # Convert Polars DataFrame to Pandas for Altair compatibility
-# df_pandas = df_encoded.to_pandas()
-
-# # Create a scatter plot using Altair
-# chart = alt.Chart(df_pandas).mark_circle(size=100).encode(
-#     x=alt.X('character:N', title="Kanji"),
-#     y=alt.Y('Cluster:N', title="Cluster"),
-#     color=alt.Color('Cluster:N', title="Cluster"),
-#     tooltip=['character', 'wk_radicals', 'Cluster']
-# ).properties(
-#     title="Kanji Cluster Analysis with Polars"
-# )
-
-# # chart.show()
-# st.altair_chart(
-#     chart
-# )
-
-#########################################################
-
-
 # most used radicals
 
-
-# radicals_count_dict = radicals_count.set_index('wk_radicals').to_dict()['count']
-import streamlit as st
-import pyvis
-from pyvis.network import Network
-import polars as pl
-
-# Example DataFrame (Replace with your actual data)
-# data = {
-#     "character": ["一", "二", "三", "四"],
-#     "wk_radicals": [["一"], ["二"], ["三"], ["一", "二"]]
-# }
-
-# # Create a Polars DataFrame
-# kanjis = pl.DataFrame(data)
+# keep only the most used kanjis (for clearer and faster to load results)
 kanjis_filtered = (
     kanjis
-    .filter(
-        ~pl.col("freq").is_null()
-        &
-        ~pl.col("wk_radicals").is_null()
-    )
     .filter(pl.col("freq") < 100)
-
-    .sort(pl.col("freq"))
-    .select(pl.col(["character", "wk_radicals"])) 
+    .select(pl.col(["character", "wk_radicals"]))
 )
 
+# Total amount of times each radical appears in the kanjis_filtered df 
 radicals_count = (
     kanjis_filtered
-    .select(pl.col("wk_radicals")).explode("wk_radicals")
-    .select(pl.col("wk_radicals").value_counts())
+    .explode("wk_radicals")
+    .select(pl.col("wk_radicals").value_counts(sort=True))
     .unnest("wk_radicals")
-    .sort(by="count",descending=True)
-).filter(~pl.col("wk_radicals").is_null())
+)
+
+# normalize the count column, to have consistent proportions for the plot
 radicals_count_norm = (
     radicals_count
     .with_columns(
@@ -626,182 +492,36 @@ radicals_count_norm = (
         )
     )
 
+# create a dict from the df
 radicals_count_dict = dict(zip(radicals_count['wk_radicals'], radicals_count_norm['count']))
 
 
-# Initialize PyVis Network
-net = Network(notebook=False)
+# initialize PyVis Network
+net = Network(bgcolor="black", font_color="white")
 
-# Add nodes for Kanji and radicals
+# add nodes for kanji and radicals
 for kanji, radicals in kanjis_filtered.iter_rows():
 
-    # Add Kanji node
+    # add kanji node
     net.add_node(kanji, label=kanji, color='red', size=10)
     
-    # Add radical nodes and edges
+    # add radical nodes and edges
     for radical in radicals:
 
-        # Add radical node
+        # add radical node
         net.add_node(radical, label=radical, color='blue', size=radicals_count_dict[radical]*30)
-        # Add edge between Kanji and radical
+        # add edge between kanji and radical
         net.add_edge(kanji, radical)
 
-# Save the network as an HTML file
+# save the network as an HTML file
 output_path = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\simple_network.html"
 net.save_graph(output_path)
 
-# Display the graph in Streamlit using st.components.v1.html
+# read the html file
 with open(output_path, "r", encoding="utf-8") as f:
     html_content = f.read()
 
-# Embed the HTML content into Streamlit
+# show the plot in Streamlit
 st.components.v1.html(html_content, height=600)
 
-
-
-
-
-
-
-#################
-from pyvis.network import Network
-import networkx as nx
-
-# Example data
-import pandas as pd
-
-
-import networkx as nx
-import matplotlib.pyplot as plt
-
-
-
-# # Create a simple graph
-# G = nx.Graph()
-# G.add_edge(1, 2)
-
-# # Draw the graph
-# nx.draw(G, with_labels=True)
-# st.pyplot(plt)
-
-# st.write("bbbbbbbbbbbbbbb")
-
-
-
-from pyvis.network import Network
-
-# Initialize PyVis Network (disable notebook rendering to avoid notebook-specific errors)
-# net = Network(notebook=False)
-
-# # Add nodes and edges
-# net.add_node(1, label="Node 1")
-# net.add_node(2, label="Node 2")
-# net.add_edge(1, 2)
-
-# # Save the network as an HTML file
-# output_path = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\simple_network.html"
-# net.save_graph(output_path)
-
-# # Display the graph in Streamlit using st.components.v1.html
-# with open(output_path, "r", encoding="utf-8") as f:
-#     html_content = f.read()
-
-# # Embed the HTML content into Streamlit
-# st.components.v1.html(html_content, height=600)
-
-
-
-# Kanji and their radicals (replace this with your actual data)
-data = pd.DataFrame({
-    "character": ["木", "森", "林"],
-    "radicals": [["木"], ["木", "木", "木"], ["木", "木"]]
-})
-
-# Create a graph object using NetworkX
-G = nx.Graph()
-
-# Add edges between kanji and radicals
-for index, row in data.iterrows():
-    kanji = row["character"]
-    for radical in row["radicals"]:
-        G.add_edge(kanji, radical)
-
-# Initialize PyVis Network
-net = Network(notebook=False, height="750px", width="100%", directed=False)
-
-# Load the NetworkX graph into PyVis
-net.from_nx(G)
-
-# Save and show the visualization
-
-net.show("kanji_radical_network.html")
-
-# Read the HTML file and embed it in Streamlit
-with open("kanji_radical_network.html", "r", encoding="utf-8") as f:
-    html_content = f.read()
-
-st.components.v1.html(html_content, height=750, width=900)
-#############################
-# # Assuming `kanjis` is your original dataframe with a "freq" column
-# kanjis_filtered = (
-#     kanjis
-#     .filter(
-#         ~pl.col("freq").is_null()
-#         &
-#         ~pl.col("wk_radicals").is_null()
-#     )
-#     .sort(pl.col("freq"))
-#     .select(pl.col(["character", "wk_radicals"])) 
-# )
-
-# kanjis_filtered
-# # Create edges: Each kanji-radical pair
-# edges = (
-#     kanjis_filtered
-    
-#     .explode("wk_radicals")
-#     .rename({"character": "kanji", "wk_radicals": "radical"})
-# )
-
-# # Create nodes: Combine unique kanjis and radicals
-# kanji_nodes = edges.select(pl.col("kanji").unique()).rename({"kanji": "node"}).with_columns(
-#     pl.lit("kanji").alias("type")
-# )
-# radical_nodes = edges.select(pl.col("radical").unique()).rename({"radical": "node"}).with_columns(
-#     pl.lit("radical").alias("type")
-# )
-# nodes = pl.concat([kanji_nodes, radical_nodes])
-
-# # Assign simple positions and sizes for visualization
-# nodes = nodes.with_columns([
-#     (pl.col("type") == "kanji").cast(int).alias("x"),  # kanji = 1, radical = 0
-#     pl.arange(0, nodes.height).alias("y"),  # simple unique y positions
-#     pl.when(pl.col("type") == "kanji").then(40).otherwise(20).alias("size")  # size based on type
-# ])
-
-# # Convert to pandas for Altair
-# nodes_pd = nodes.to_pandas()
-# edges_pd = edges.to_pandas()
-
-# # Create edges chart
-# edges_chart = alt.Chart(edges_pd).mark_line(opacity=0.6, strokeWidth=1).encode(
-#     x=alt.X('kanji:N', title='Kanji'),
-#     x2=alt.X2('radical:N', title='Radical'),
-# )
-
-# # Create nodes chart
-# nodes_chart = alt.Chart(nodes_pd).mark_circle().encode(
-#     x='x:Q',
-#     y='y:Q',
-#     size='size:Q',
-#     color='type:N',
-#     tooltip='node:N'
-# )
-
-# # Combine charts
-# network_chart = edges_chart + nodes_chart
-# network_chart = network_chart.properties(width=600, height=400)
-
-# # Display in Streamlit
-# st.altair_chart(network_chart, use_container_width=True)
 
