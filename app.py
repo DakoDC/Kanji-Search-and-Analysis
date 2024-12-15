@@ -119,7 +119,7 @@ kanjis = kanjis.vstack(phrases)
 kana_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kana.json"
 
 # load the kana file
-@st.cache_data
+# @st.cache_data
 def kana_load():
     with open(kana_url, mode="r") as f:
         json_object = json.load(f)
@@ -131,11 +131,27 @@ kana_dict = kana_load()
 # given a list of kanas, it translates it to romaji
 def kana_to_romaji(row):
     new_row = []
+    double_letter = False
     for word in row:
-        romaji_word = ''.join(kana_dict.get(char, '') for char in word)
+        romaji_word = ''
+        for char in word:
+            if char in ["ゃ", "ゅ", "ょ","ャ", "ュ", "ョ"]:
+                romaji_word = romaji_word[:-1]
+
+            if double_letter:
+                romaji_word = romaji_word + kana_dict.get(char, '')[0]
+                double_letter = False
+            
+            romaji_word = romaji_word + kana_dict.get(char, '')
+            
+            if char == "っ":
+                double_letter = True
+
+        
+
         new_row.append(romaji_word)
     return new_row
-
+# st.write(kana_to_romaji(["きゅう","く"]))
 # adds the romaji translation to the kanjis df (creates a new different df)
 @st.cache_data
 def add_romaji():
@@ -145,8 +161,8 @@ def add_romaji():
     )
 
 kanjis_romaji = add_romaji()
-
-
+kanjis_romaji
+a
 
 #############################
 
