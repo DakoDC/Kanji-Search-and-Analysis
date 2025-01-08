@@ -21,12 +21,16 @@ import json                 # read json file
 import polars as pl         # data manipulation
 import streamlit as st      # framework to create an interactive app
 import pandas as pd         # used for functions that won't work with polars
-import os                   # cehck if save kanjis file exists
+import os                   # check if save kanjis file exists
 import altair as alt        # make plots
+
 from st_aggrid import AgGrid, GridOptionsBuilder # allow dataframe to be clickable
 from st_aggrid.shared import GridUpdateMode
-# import pyvis
+
 from pyvis.network import Network
+
+import importlib
+
 # Data sources:
 # https://github.com/davidluzgouveia/kanji-data  ## kanji.json
 # https://www.kaggle.com/datasets/dinislamgaraev/popular-japanese-words ## words.tsv
@@ -53,7 +57,7 @@ def kanji_load():
 
     return pl.DataFrame(kanjis_raw)
 
-kanjis = kanji_load() # 13108 kanjis
+kanjis_only = kanji_load() # 13108 kanjis
 
 
 # Note from the source data author: "Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
@@ -107,10 +111,13 @@ def words_load():
     )
     return phrases
 
+# dataframe of kanjis words/phrases composed of more than 1 kanji
 phrases = words_load()
-kanjis = kanjis.vstack(phrases)
 
+# add all kanjis and phrases in a single dataframe
+kanjis = kanjis_only.vstack(phrases)
 
+kanjis
 ##################
 
 # dictionary {kana: romaji}
@@ -137,6 +144,7 @@ def kana_to_romaji(row):
         for char in word:
             if char in ["ゃ", "ゅ", "ょ","ャ", "ュ", "ョ"]:
                 romaji_word = romaji_word[:-1]
+                # st.write("aaa: ",kana_dict.get(char, ''))
 
             if double_letter:
                 romaji_word = romaji_word + kana_dict.get(char, '')[0]
@@ -146,8 +154,6 @@ def kana_to_romaji(row):
             
             if char == "っ":
                 double_letter = True
-
-        
 
         new_row.append(romaji_word)
     return new_row
@@ -161,8 +167,8 @@ def add_romaji():
     )
 
 kanjis_romaji = add_romaji()
-kanjis_romaji
-a
+
+
 
 #############################
 
@@ -208,10 +214,24 @@ def kanji_search(word_search):
     
 
 
+####### Sidebar page selection #########
 
 
 
+# Sidebar for navigation
+st.sidebar.title("Navigation")
+selected_page = st.sidebar.radio("Select a page:", ["Page 1", "Page 2"])
 
+# Map page names to module paths
+page_modules = {
+    "Page 1": "pages.operations", # Maps "Page 1" to the `page1.py` file in `pages` folder
+    "Page 2": "pages.plots",
+}
+
+# Dynamically load and run the selected page
+if selected_page in page_modules:
+    page_module = importlib.import_module(page_modules[selected_page])
+    page_module.run()
 
     
 
@@ -413,6 +433,11 @@ if not saved_edit.is_empty(): # without it gives an error for the next if
 
 
 
+
+#############################
+
+
+
 ############## Operations on the saved kanjis ###############
 
 # Gets the saved kanjis with the same radical
@@ -464,10 +489,11 @@ chart = (
         alt.Size("character", title="Number of kanjis"),
     )
 ).properties(
+    title="Amount of Kanjis by JLPT Level and Stroke Count",
+
     height = 200,
     width = 480
 )
-st.write("Amount of kanjis for jlpt level and number of strokes")
 
 st.altair_chart(chart)
 # The more difficult the level the more strokes are needed
@@ -488,7 +514,7 @@ st.altair_chart(chart)
 # keep only the most used kanjis (for clearer and faster to load results)
 kanjis_filtered = (
     kanjis
-    .filter(pl.col("freq") < 100)
+    .filter(pl.col("freq") < 125)
     .select(pl.col(["character", "wk_radicals"]))
 )
 
@@ -513,24 +539,26 @@ radicals_count_dict = dict(zip(radicals_count['wk_radicals'], radicals_count_nor
 
 
 # initialize PyVis Network
-net = Network(bgcolor="black", font_color="white")
+net = Network(bgcolor="gray", font_color="white")
+
 
 # add nodes for kanji and radicals
 for kanji, radicals in kanjis_filtered.iter_rows():
 
     # add kanji node
-    net.add_node(kanji, label=kanji, color='red', size=10)
+    net.add_node(kanji, label=kanji, color='cyan', size=10)
     
     # add radical nodes and edges
     for radical in radicals:
 
         # add radical node
-        net.add_node(radical, label=radical, color='blue', size=radicals_count_dict[radical]*30)
+        net.add_node(radical, label=radical, color='navy', size=radicals_count_dict[radical]*30)
         # add edge between kanji and radical
         net.add_edge(kanji, radical)
 
 # save the network as an HTML file
 output_path = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\simple_network.html"
+
 net.save_graph(output_path)
 
 # read the html file
@@ -538,6 +566,37 @@ with open(output_path, "r", encoding="utf-8") as f:
     html_content = f.read()
 
 # show the plot in Streamlit
-st.components.v1.html(html_content, height=600)
 
 
+
+col1, col2 = st.columns([10, 1])  # Make the plot wider than the legend
+with col1:
+    # @st.cache_data
+    def show_network():
+        st.components.v1.html(html_content, height=600)
+    show_network()
+
+with col2:
+    st.markdown(
+        """
+        <div style="
+            border: 2px solid white; 
+            border-radius: 10px; 
+            padding: auto; 
+            background-color: gray; 
+            color: white;
+            width: 115px;
+        ">
+            <h4 style="margin-top: 0;">Legend:</h4>
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <div style="width: 12px; height: 12px; background-color: navy; border-radius: 50%; margin-right: 8px;"></div>
+                <span>Radicals</span>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <div style="width: 12px; height: 12px; background-color: cyan; border-radius: 50%; margin-right: 8px;"></div>
+                <span>Kanjis</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
