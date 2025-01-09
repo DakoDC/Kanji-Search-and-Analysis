@@ -42,6 +42,9 @@ import importlib
 # configures the streamlit page layout
 st.set_page_config(layout="wide") 
 
+
+
+
 kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
 
 @st.cache_data
@@ -104,10 +107,10 @@ def words_load():
         phrases
         .with_columns(
             # for every column of the kanjis df not in the words df, it adds a column with the same name of NULLs 
-            pl.lit(None).alias(col) for col in kanjis.columns if col not in phrases.columns
+            pl.lit(None).alias(col) for col in kanjis_only.columns if col not in phrases.columns
             )
             # sorts the columns in the correct order
-            .select(kanjis.columns)
+            .select(kanjis_only.columns)
     )
     return phrases
 
@@ -117,7 +120,6 @@ phrases = words_load()
 # add all kanjis and phrases in a single dataframe
 kanjis = kanjis_only.vstack(phrases)
 
-kanjis
 ##################
 
 # dictionary {kana: romaji}
@@ -214,26 +216,7 @@ def kanji_search(word_search):
     
 
 
-####### Sidebar page selection #########
 
-
-
-# Sidebar for navigation
-st.sidebar.title("Navigation")
-selected_page = st.sidebar.radio("Select a page:", ["Page 1", "Page 2"])
-
-# Map page names to module paths
-page_modules = {
-    "Page 1": "pages.operations", # Maps "Page 1" to the `page1.py` file in `pages` folder
-    "Page 2": "pages.plots",
-}
-
-# Dynamically load and run the selected page
-if selected_page in page_modules:
-    page_module = importlib.import_module(page_modules[selected_page])
-    page_module.run()
-
-    
 
 ############# Streamlit ###############
 
