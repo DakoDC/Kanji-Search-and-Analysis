@@ -1,0 +1,14 @@
+[project]
+name = "kanji-analysis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "altair>=4.2.2",
+    "pandas>=2.2.3",
+    "polars>=1.14.0",
+    "pyvis>=0.3.2",
+    "streamlit-aggrid>=1.0.5",
+    "streamlit>=1.40.1",
+]
