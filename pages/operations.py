@@ -9,7 +9,7 @@ import polars as pl
 st.set_page_config(layout="wide") 
 
 st.write("# Operations on the saved kanjis")
-st.write("Here you can search for specific features in the kanjis saved in the library")
+st.write("Here you can search for specific features of the kanjis saved in the library")
 
 
 # file with the saved kanjis library
@@ -46,7 +46,7 @@ jlpt_max_0 = min_max["jlpt_new"][1]
 # Adds the sliders to the sidebar
 with st.sidebar:
     st.header("Dataframe Filter Options")
-
+    st.write("Move the sliders to filter the kanjis")
     grade_min, grade_max = st.slider(
         "Grade",
         min_value=grade_min_0, max_value=grade_max_0, value=(grade_min_0, grade_max_0))
@@ -73,7 +73,7 @@ saved_filtered = saved.filter(
 )
 
 # Show the filtered dataframe
-st.write("Filtered Dataframe", saved_filtered)
+st.write("##### Saved kanjis library:",saved_filtered)
 
 
 
