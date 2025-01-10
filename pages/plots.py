@@ -243,6 +243,7 @@ chart = (
 )
 col1,col2 = st.columns([3,5], gap="large") # creates n_cols spaces where to put each df
 
+
 with(col1):
     st.write("###### Analysis:")
     st.write(

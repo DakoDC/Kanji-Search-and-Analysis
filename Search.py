@@ -128,30 +128,47 @@ kana_dict = kana_load()
 # given a list of kanas, it translates it to romaji
 def kana_to_romaji(row):
     new_row = []
-    double_letter = False
+    double_letter = False # check if next kana needs the double letter
+    remove_y = False # check if next kana needs to remove the y
+
     for word in row:
         romaji_word = ''
         for char in word:
-            # when the following kana is small it "mixes" with the previous kana
-            # か = ka, や = ya
-            # かゃ = "kya" non "kaya"
-            if char in ["ゃ", "ゅ", "ょ","ャ", "ュ", "ョ"]: 
+            # when the following kana is small it "mixes" with the previous kana ("yoon")
+            # か = "ka", ゃ = "ya"
+            # かゃ = "kya" not "kaya"
+            if char in ["ゃ", "ゅ", "ょ", # hiragana
+                        "ャ", "ュ", "ョ"]: # katakana
                 romaji_word = romaji_word[:-1]
-                # st.write("aaa: ",kana_dict.get(char, ''))
+
+            # for some types of kana it's more correct to remove the y of the yoon from the romaji
+            # ち = "chi", ゃ = "ya"
+            # ちゃ = "cha" not "chya"
+            if remove_y:
+                romaji_word = romaji_word + kana_dict.get(char, '')[1:]
+                remove_y = False
+            
 
             # when the previous kana is っ, or ッ (smaller version of the respective kana),
             # it doubles the following consonant
-            # か = ka, や = ya
+            # か = "ka", や = "ya"
             # やっか = "yakka"
             if double_letter:
                 romaji_word = romaji_word + kana_dict.get(char, '')[0]
                 double_letter = False
             
+            
             # add the translation of the kana to the full word
             romaji_word = romaji_word + kana_dict.get(char, '')
             
+            if char in ["し","ち","じ","ぢ", # hiragana
+                        "シ","チ","ジ","ヂ"]: # katakana
+                remove_y = True
+               
             if char in ["っ","ッ"]: # doubles the next consonant
                 double_letter = True
+
+ 
 
         new_row.append(romaji_word)
     return new_row
