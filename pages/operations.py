@@ -18,6 +18,10 @@ saved_url = r"saved.tsv"
 # reads the kanjis library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True).drop(pl.col(["save","jlpt_old"]))
 
+if saved.is_empty():
+    st.info('''There aren't any save kanjs  
+            Save some kanjis from the "Search" page to be able to make operations on them''')
+    st.stop()
 
 
 
@@ -25,22 +29,15 @@ saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True).drop(p
 ######## Create filtered dataframes depending on the values of a slider ########
 
 
-# Dataframes with the min and max values of the respective columns
-mins  = saved.select(pl.col(["strokes","grade","freq","jlpt_new","wk_level"]).min().cast(pl.Int32))
-maxes = saved.select(pl.col(["strokes","grade","freq","jlpt_new","wk_level"]).max().cast(pl.Int32))    
-
-min_max = pl.concat([mins,maxes])
-
-
-# Assigns each min/max to a variable
-grade_min_0 = min_max["grade"][0]
-grade_max_0 = min_max["grade"][1]
-freq_min_0 = min_max["freq"][0]
-freq_max_0 = min_max["freq"][1]
-strokes_min_0 = min_max["strokes"][0]
-strokes_max_0 = min_max["strokes"][1]
-jlpt_min_0 = min_max["jlpt_new"][0]
-jlpt_max_0 = min_max["jlpt_new"][1]
+# Assigns each min/max value to a variable
+grade_min_0 = 1
+grade_max_0 = 10
+freq_min_0 = 1
+freq_max_0 = 2500
+strokes_min_0 = 1
+strokes_max_0 = 24
+jlpt_min_0 = 1
+jlpt_max_0 = 5
 
 
 # Adds the sliders to the sidebar

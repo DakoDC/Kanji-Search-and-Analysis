@@ -6,7 +6,7 @@ import polars as pl         # data manipulation
 import streamlit as st      # framework to create an interactive app
 import pandas as pd         # used for functions that won't work with polars
 import os                   # check if save kanjis file exists
-
+from kana import create_kana_json
 from st_aggrid import AgGrid, GridOptionsBuilder # allow dataframe to be clickable
 from st_aggrid.shared import GridUpdateMode
 
@@ -111,11 +111,15 @@ kanjis = kanjis_only.vstack(phrases)
 # kana: japanese phonetic alphabet 
 # romaji: translation of kana in the latin alphabet phontics 
 
+
+
 kana_json = r"kana.json"
 
 # load the kana file
 @st.cache_data
 def kana_load():
+    create_kana_json() # creates the kana file
+
     with open(kana_json, mode="r") as f:
         json_object = json.load(f)
     return json_object
