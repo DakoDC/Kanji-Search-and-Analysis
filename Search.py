@@ -111,12 +111,12 @@ kanjis = kanjis_only.vstack(phrases)
 # kana: japanese phonetic alphabet 
 # romaji: translation of kana in the latin alphabet phontics 
 
-kana_url = r"kana.json"
+kana_json = r"kana.json"
 
 # load the kana file
 @st.cache_data
 def kana_load():
-    with open(kana_url, mode="r") as f:
+    with open(kana_json, mode="r") as f:
         json_object = json.load(f)
     return json_object
 
@@ -133,21 +133,19 @@ def kana_to_romaji(row):
 
     for word in row:
         romaji_word = ''
+
         for char in word:
+
             # when the following kana is small it "mixes" with the previous kana ("yoon")
             # か = "ka", ゃ = "ya"
             # かゃ = "kya" not "kaya"
             if char in ["ゃ", "ゅ", "ょ", # hiragana
                         "ャ", "ュ", "ョ"]: # katakana
+
+
                 romaji_word = romaji_word[:-1]
 
-            # for some types of kana it's more correct to remove the y of the yoon from the romaji
-            # ち = "chi", ゃ = "ya"
-            # ちゃ = "cha" not "chya"
-            if remove_y:
-                romaji_word = romaji_word + kana_dict.get(char, '')[1:]
-                remove_y = False
-            
+                        
 
             # when the previous kana is っ, or ッ (smaller version of the respective kana),
             # it doubles the following consonant
@@ -159,7 +157,17 @@ def kana_to_romaji(row):
             
             
             # add the translation of the kana to the full word
-            romaji_word = romaji_word + kana_dict.get(char, '')
+            # for some types of kana it's more correct to remove the y of the yoon from the romaji
+            # ち = "chi", ゃ = "ya"
+            # ちゃ = "cha" not "chya"
+            if remove_y:
+                if char in ["ゃ", "ゅ", "ょ", # hiragana
+                            "ャ", "ュ", "ョ"]: # katakana
+                    romaji_word = romaji_word + kana_dict.get(char, '')[1:]
+                remove_y = False
+            else:
+                romaji_word = romaji_word + kana_dict.get(char, '')
+
             
             if char in ["し","ち","じ","ぢ", # hiragana
                         "シ","チ","ジ","ヂ"]: # katakana
@@ -167,12 +175,9 @@ def kana_to_romaji(row):
                
             if char in ["っ","ッ"]: # doubles the next consonant
                 double_letter = True
-
- 
-
+            
         new_row.append(romaji_word)
     return new_row
-
 
 # adds the romaji translation to the kanjis df (creates a new different df)
 @st.cache_data
