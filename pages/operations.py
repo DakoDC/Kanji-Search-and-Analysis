@@ -1,6 +1,5 @@
 
-############## Operations on the saved kanjis library ###############
-
+######## Operations on the saved kanjis library ###########
 
 import streamlit as st
 import polars as pl
@@ -8,12 +7,13 @@ import polars as pl
 # configures the streamlit page layout
 st.set_page_config(layout="wide") 
 
+
 st.write("# Operations on the saved kanjis")
 st.write("Here you can search for specific features of the kanjis saved in the library")
 
 
 # file with the saved kanjis library
-saved_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\saved.tsv"
+saved_url = r"saved.tsv"
 
 # reads the kanjis library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True).drop(pl.col(["save","jlpt_old"]))

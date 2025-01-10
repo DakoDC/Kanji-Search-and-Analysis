@@ -1,28 +1,11 @@
 
-# Bug: Se tolgo un kanji che nel search df ha la checkbox true -> lo risalva
-# - mettere che se metto true lo rimette subito a False ?
-# Nella ricerca per cana non conta i tsu piccoli (dako -> dakko)
-
-# cambia nome colonna character ?
-# Questione lower, forse meglio cercare di rendere tutto minuscolo in kanjis ? Forse no ?
-# - fare in modo che trova parole lunghe insieme ai singoli kanji, non solo se non ne trova (?) # es. plane (hikouki)
-# tenere words_load così o più compatto ?
-
-# Fai sezione aperta da un pulsante dei grafici / analisi dei kanji
-# cerca kanji con radicale uguale
-# cerca parole con lo stesso kanji dentro
-# unire romaji a df originale ?
-
-# grafo cluster di radicali più usati 
-# (aggiungere radicali mancanti ?)
-
+##### Search and save #####
 
 import json                 # read json file
 import polars as pl         # data manipulation
 import streamlit as st      # framework to create an interactive app
 import pandas as pd         # used for functions that won't work with polars
 import os                   # check if save kanjis file exists
-import altair as alt        # make plots
 
 from st_aggrid import AgGrid, GridOptionsBuilder # allow dataframe to be clickable
 from st_aggrid.shared import GridUpdateMode
@@ -40,15 +23,15 @@ from st_aggrid.shared import GridUpdateMode
 st.set_page_config(layout="wide") 
 
 
+############ Kanjis ############
+kanji_json = r'kanji.json'
 
-
-kanji_url = r'C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kanji.json'
-
+# Adapt an load the kanjis dataframe
 @st.cache_data
 def kanji_load():
-    with open(kanji_url, 'r', encoding="UTF-8" ) as file:
+    with open(kanji_json, 'r', encoding="UTF-8" ) as file:
         data = json.load(file)
-    ## print( pl.read_json(kanji_json).head()) # formato del file non adatto per read_json
+
     kanjis_raw = list()
     for kanji in data: # for every kanji in the file, each with its data
         kanji_dict = {"save": False,"character": kanji} # convert the kanji to an item in a dict
@@ -60,14 +43,15 @@ def kanji_load():
 kanjis_only = kanji_load() # 13108 kanjis
 
 
-# Note from the source data author: "Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
+# Note from the author of the source data: "Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
 # I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani"
 
 
-################
 
-words_tsv = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\words.tsv"
 
+############ Words/Phrases ############
+
+words_tsv = r"words.tsv"
 
 @st.cache_data
 def words_load():
@@ -117,21 +101,28 @@ phrases = words_load()
 # add all kanjis and phrases in a single dataframe
 kanjis = kanjis_only.vstack(phrases)
 
-##################
+
+
+
+
+############ Hiragana and Katakana ############
 
 # dictionary {kana: romaji}
 # kana: japanese phonetic alphabet 
 # romaji: translation of kana in the latin alphabet phontics 
-kana_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\kana.json"
+
+kana_url = r"kana.json"
 
 # load the kana file
-# @st.cache_data
+@st.cache_data
 def kana_load():
     with open(kana_url, mode="r") as f:
         json_object = json.load(f)
     return json_object
 
-# dict where keys = kana, values = romaji (spelling in the roman alphabet)
+# dict where:
+# keys = kana,
+# values = romaji (spelling in the roman alphabet) es. kanji:"犬", hiragana:"いぬ", romaji:"Inu", english:"Dog"
 kana_dict = kana_load()
 
 # given a list of kanas, it translates it to romaji
@@ -141,22 +132,31 @@ def kana_to_romaji(row):
     for word in row:
         romaji_word = ''
         for char in word:
-            if char in ["ゃ", "ゅ", "ょ","ャ", "ュ", "ョ"]:
+            # when the following kana is small it "mixes" with the previous kana
+            # か = ka, や = ya
+            # かゃ = "kya" non "kaya"
+            if char in ["ゃ", "ゅ", "ょ","ャ", "ュ", "ョ"]: 
                 romaji_word = romaji_word[:-1]
                 # st.write("aaa: ",kana_dict.get(char, ''))
 
+            # when the previous kana is っ, or ッ (smaller version of the respective kana),
+            # it doubles the following consonant
+            # か = ka, や = ya
+            # やっか = "yakka"
             if double_letter:
                 romaji_word = romaji_word + kana_dict.get(char, '')[0]
                 double_letter = False
             
+            # add the translation of the kana to the full word
             romaji_word = romaji_word + kana_dict.get(char, '')
             
-            if char == "っ":
+            if char in ["っ","ッ"]: # doubles the next consonant
                 double_letter = True
 
         new_row.append(romaji_word)
     return new_row
-# st.write(kana_to_romaji(["きゅう","く"]))
+
+
 # adds the romaji translation to the kanjis df (creates a new different df)
 @st.cache_data
 def add_romaji():
@@ -169,7 +169,7 @@ kanjis_romaji = add_romaji()
 
 
 
-#############################
+######## Search Dataframe ##########
 
 # Find the corrresponding kanji of an english word
 def kanji_search(word_search):
@@ -240,10 +240,19 @@ search_df_edit = pl.DataFrame(st.data_editor( # returns a pandas df by default
 
 
 
+st.info("To save a kanji in the library, tick the corresponding checkbox")
 
+
+st.write(
+    '''
+    ---  
+    ---
+    ''')
+
+############### Saved Kanjis Library ###################
 
 # file with the saved kanjis library
-saved_url = r"C:\Users\dakot\OneDrive\Desktop\Git-repositories\Kanji-Analysis\saved.tsv"
+saved_url = r"saved.tsv"
 
 
 def initialize_file():
@@ -258,17 +267,7 @@ def initialize_file():
 if not os.path.exists(saved_url):
     initialize_file()
 
-st.info("To save a kanji in the library tick the corresponding checkbox")
-
-
-st.write(
-    '''
-    ---  
-    ---
-    ''')
-
-############### Saved Kanjis Library ###################
-
+# Add the option to change viewing mode to the sidebar
 with st.sidebar:
     st.header("Viewing mode")
     st.write("Change the way the saved kanjis are displayed to a more compact format")
@@ -277,9 +276,6 @@ with st.sidebar:
 
 # reads the kanjis library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True)
-
-# switches to the compact viewing mode
-# st.info("You can change the viewing style of the saved kanjis ")
 
 
 # Normal mode
@@ -350,7 +346,6 @@ else:
                 update_mode = GridUpdateMode.SELECTION_CHANGED,
                 height = height_kanjis_pd,
                 theme = "streamlit",
-                # allow_unsafe_jscode = True,
             )
 
             # adds each splitted df to a list
@@ -383,7 +378,8 @@ else:
             st.write(f"# {selected_kanji}", kanjis.filter(pl.col('character') == selected_kanji))
 
 
-st.info("To unsave a kanji uncheck the corresponding checkbox")
+st.info("To unsave a kanji, uncheck the corresponding checkbox")
+st.info("You can sort the kanjis by clicking the corresponding column name")
 
 
 
@@ -392,7 +388,8 @@ st.info("To unsave a kanji uncheck the corresponding checkbox")
 
 ##################### Add and remove kanjis from the saved library ##################
 
-### Add ###
+
+####### Add #######
 
 # df with the kanjis checked in the search df, that need to be added to the library
 kanji_to_add = search_df_edit.filter(
@@ -409,7 +406,7 @@ if not kanji_to_add.is_empty():
 
 
 
-### Remove ###
+####### Remove #######
 
 # If a kanji in the library is unchecked, it removes it
 if not saved_edit.is_empty(): # without it gives an error for the next if 
