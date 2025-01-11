@@ -24,19 +24,19 @@ The project uses [uv](https://docs.astral.sh/uv/) for handling the libreries dep
 
 If you don't already have uv installed, as instructed on the [uv website](https://docs.astral.sh/uv/) on the section "Introduction", go to the command line and type:  
 For windows:
-- powershell -c "irm https\://astral.sh/uv/install.ps1 | iex"  
+- `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
 
 For macOS or linux:
-- curl -LsSf https\://astral.sh/uv/install.sh | sh  
+- `curl -LsSf https\://astral.sh/uv/install.sh | sh`  
 
 It might be necessary to reboot the pc for the changes to apply.  
 
 After downloading the project files,  
 go in the command line and type the following, by replacing *folder_path* with the path of the folder just dowloaded:
-- cd *folder_path*
+- `cd folder_path`
 
 Then use the following command to start the application:  
-- uv run streamlit run Search.py
+- `uv run streamlit run Search.py`
 
 This will download the needed python libraries for the application and run it on your browser, the first time it might take some time to load.  
 
