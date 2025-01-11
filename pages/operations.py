@@ -12,12 +12,14 @@ st.write("# Operations on the saved kanjis")
 st.write("Here you can search for specific features of the kanjis saved in the library")
 
 
+
 # file with the saved kanjis library
 saved_url = r"saved.tsv"
 
 # reads the kanjis library file
 saved = pl.read_csv(saved_url, separator='\t',truncate_ragged_lines=True).drop(pl.col(["save","jlpt_old"]))
 
+# Case with no kanjis saved yet
 if saved.is_empty():
     st.info('''There aren't any save kanjs  
             Save some kanjis from the "Search" page to be able to make operations on them''')
@@ -44,6 +46,7 @@ jlpt_max_0 = 5
 with st.sidebar:
     st.header("Dataframe Filter Options")
     st.write("Move the sliders to filter the kanjis")
+
     grade_min, grade_max = st.slider(
         "Grade",
         min_value=grade_min_0, max_value=grade_max_0, value=(grade_min_0, grade_max_0))
@@ -59,15 +62,35 @@ with st.sidebar:
     jlpt_min, jlpt_max = st.slider(
         "JLPT Level",
         min_value=jlpt_min_0, max_value=jlpt_max_0, value=(jlpt_min_0, jlpt_max_0))
+    
+    st.info("Some kanjis might not have all the fields of the sliders")
+    remove_null = st.checkbox("Remove kanjis with missing data")
+
 
 # filter the saved kanjis df with the specified filters made with the sliders by the user
-saved_filtered = saved.filter(
-    (pl.col("grade") >= grade_min) & (pl.col("grade") <= grade_max),
-    (pl.col("freq") >= freq_min) & (pl.col("freq") <= freq_max),
-    (pl.col("strokes") >= strokes_min) & (pl.col("strokes") <= strokes_max),
-    (pl.col("jlpt_new") >= jlpt_min) & (pl.col("jlpt_new") <= jlpt_max)
 
-)
+if remove_null:
+    saved_filtered = saved.filter(
+        (pl.col("grade") >= grade_min) & (pl.col("grade") <= grade_max),
+        (pl.col("freq") >= freq_min) & (pl.col("freq") <= freq_max),
+        (pl.col("strokes") >= strokes_min) & (pl.col("strokes") <= strokes_max),
+        (pl.col("jlpt_new") >= jlpt_min) & (pl.col("jlpt_new") <= jlpt_max)
+    )
+else:
+    saved_filtered = saved.filter(
+            (pl.col("grade") >= grade_min) & (pl.col("grade") <= grade_max),
+            (pl.col("freq") >= freq_min) & (pl.col("freq") <= freq_max),
+            (pl.col("strokes") >= strokes_min) & (pl.col("strokes") <= strokes_max),
+            (pl.col("jlpt_new") >= jlpt_min) & (pl.col("jlpt_new") <= jlpt_max)
+        ).vstack( # add the kanjis that are missing the grade, freq and jlpt_new fields
+            saved.filter(pl.col("freq").is_null()).filter(
+                (pl.col("strokes") >= strokes_min) & (pl.col("strokes") <= strokes_max), # check only for the strokes
+            )
+        ).vstack( # add the kanjis that are missing the strokes, grade, freq and jlpt_new fields
+            saved.filter(pl.col("freq").is_null()).filter(
+                (pl.col("jlpt_new") >= jlpt_min) & (pl.col("jlpt_new") <= jlpt_max), # check only for the strokes
+            )
+        )
 
 # Show the filtered dataframe
 st.write("##### Saved kanjis library:",saved_filtered)

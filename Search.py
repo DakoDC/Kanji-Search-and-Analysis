@@ -46,7 +46,20 @@ kanjis_only = kanji_load() # 13108 kanjis
 # Note from the author of the source data: "Some of the meanings and readings that were extracted from WaniKani have a ^ or a ! prefix.
 # I added these to denote when an item is not a primary answer (^) or not an accepted answer (!) on WaniKani"
 
-
+# Each kanji has the following fields:
+# "strokes": number of movement/writings needed to write it
+# "grade": school grade it is learned in
+# "freq": ranking from 1 to 2500 of the most used kanjis in daily life
+# "jlpt_old": JLPT (Japanese-Language Proficiency Test) level with the old system (before 07/2010)
+# "jlpt_new": New and current JLPT level
+# "meanings": general meanings of a kanji
+# "readings_on": general On'yomi (Reading coming originally from chinese) readings
+# "readings_kun": general Kun'yomi (Reading originally japanese) readings
+# "wk_level": Wani Kani level (Wani Kani, famous learning application)
+# "wk_meanings": Wani Kani meanings
+# "wk_readings_on": Wani Kani On'yomi readings
+# "wk_readings_kun": Wani Kani Kun'yomi readings
+# "wk_radicals": Wani Kani names of the radicals composing the kanji
 
 
 ############ Words/Phrases ############
@@ -145,11 +158,7 @@ def kana_to_romaji(row):
             # かゃ = "kya" not "kaya"
             if char in ["ゃ", "ゅ", "ょ", # hiragana
                         "ャ", "ュ", "ョ"]: # katakana
-
-
                 romaji_word = romaji_word[:-1]
-
-                        
 
             # when the previous kana is っ, or ッ (smaller version of the respective kana),
             # it doubles the following consonant
@@ -168,11 +177,13 @@ def kana_to_romaji(row):
                 if char in ["ゃ", "ゅ", "ょ", # hiragana
                             "ャ", "ュ", "ョ"]: # katakana
                     romaji_word = romaji_word + kana_dict.get(char, '')[1:]
+                else:
+                    romaji_word = romaji_word + kana_dict.get(char, '')
                 remove_y = False
+                
             else:
                 romaji_word = romaji_word + kana_dict.get(char, '')
-
-            
+  
             if char in ["し","ち","じ","ぢ", # hiragana
                         "シ","チ","ジ","ヂ"]: # katakana
                 remove_y = True
@@ -182,6 +193,7 @@ def kana_to_romaji(row):
             
         new_row.append(romaji_word)
     return new_row
+
 
 # adds the romaji translation to the kanjis df (creates a new different df)
 @st.cache_data
@@ -193,7 +205,8 @@ def add_romaji():
 
 kanjis_romaji = add_romaji()
 
-
+# b = kanjis_romaji.filter(pl.col("character") == "明日")
+# b
 
 ######## Search Dataframe ##########
 
